@@ -33,26 +33,25 @@ async fn main() -> Result<()> {
         return Ok(());
     }
     
-    let data_dir = env::var("PGDATA").unwrap_or_else(|_| "target/data".into() );
-    let port_str = env::var("PGPORT").unwrap_or_else(|_| "5016".into() );
-    let username = env::var("POSTGRES_USER").unwrap_or_else(|_| "postgres".into() );
-    let password = env::var("POSTGRES_PASSWORD").unwrap_or_else(|_| "root_pw".into() );
+    let pg_version = "16.4.0";
     
+    let port_str = env::var("PGPORT").unwrap_or_else(|_| "5016".into() );
     let pg_port = u16::from_str_radix(&port_str, 10).unwrap();
     let port = pg_port + 3000;
     
-    //let db_url =
-    //    env::var("DATABASE_URL").unwrap_or_else(|_| "postgresql://postgres:root_pw@localhost:5016".to_string());
-    let found = match home::home_dir() {
-        Some(path) => Path::new(&format!("{}/.theseus/postgresql/16.4.0", path.display())).exists(),
-        None => false,
+    let default_install_dir = match home::home_dir() {
+        Some(path) => format!("{}/.theseus/postgresql", path.display()),
+        None => "target/epg/install".into(),
     };
-    if !found {
-        info!("Installing PostgreSQL ...");
-    }
-    //let settings = Settings::from_url(&db_url)?;
+    let install_dir = env::var("PGDIR").unwrap_or_else(|_| default_install_dir );
+    
+    let data_dir = env::var("PGDATA").unwrap_or_else(|_| "target/epg/data".into() );
+    let username = env::var("POSTGRES_USER").unwrap_or_else(|_| "postgres".into() );
+    let password = env::var("POSTGRES_PASSWORD").unwrap_or_else(|_| "root_pw".into() );
+    
     let settings = Settings {
-        version: VersionReq::parse("=16.4.0")?,
+        version: VersionReq::parse(&format!("={pg_version}"))?,
+        installation_dir: (&install_dir).into(),
         data_dir: data_dir.into(),
         port: u16::from_str_radix(&port_str, 10).unwrap(),
         temporary: false,
@@ -60,6 +59,11 @@ async fn main() -> Result<()> {
         password: password.into(),
         ..Default::default()
     };
+    
+    if !Path::new(&format!("{install_dir}/{pg_version}")).exists() {
+        info!("Installing PostgreSQL ...");
+    }
+
     let mut postgresql = PostgreSQL::new(settings);
     postgresql.setup().await?;
     
@@ -79,20 +83,12 @@ async fn main() -> Result<()> {
     info!("Starting PostgreSQL");
     postgresql.start().await?;
     
-    let database_name = if count != 0 { &args[1] } else { "epg" };
-    if count == 0 {
-        let exists = postgresql.database_exists(database_name).await?;
+    let database_name = if count != 0 { &args[1] } else { "postgres" };
+    for i in 0..count {
+        let exists = postgresql.database_exists(&args[i + 1]).await?;
         if !exists {
-            info!("Creating database: {}", database_name);
-            postgresql.create_database(database_name).await?;
-        }
-    } else {
-        for i in 0..count {
-            let exists = postgresql.database_exists(&args[i + 1]).await?;
-            if !exists {
-                info!("Creating database: {}", &args[i + 1]);
-                postgresql.create_database(&args[i + 1]).await?;
-            }
+            info!("Creating database: {}", &args[i + 1]);
+            postgresql.create_database(&args[i + 1]).await?;
         }
     }
     
