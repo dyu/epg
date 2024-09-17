@@ -27,6 +27,12 @@ async fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();
     let count = args.len() - 1;
     
+    if count != 0 && args[1] == "--version" {
+        const VERSION: &str = env!("CARGO_PKG_VERSION");
+        info!("epg v{VERSION}");
+        return Ok(());
+    }
+    
     let data_dir = env::var("PGDATA").unwrap_or_else(|_| "target/data".into() );
     let port_str = env::var("PGPORT").unwrap_or_else(|_| "5016".into() );
     let username = env::var("POSTGRES_USER").unwrap_or_else(|_| "postgres".into() );
