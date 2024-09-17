@@ -15,26 +15,33 @@ use tokio::net::TcpListener;
 use tracing::info;
 
 fn is_truthy(str: String) -> bool {
-  str == "1" || str == "true"
+    str == "1" || str == "true"
 }
 
 /// Example of how to use postgresql embedded with axum.
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt().compact().init();
-
+    
+    let data_dir = env::var("PGDATA").unwrap_or_else(|_| "target/data".into() );
+    let port_str = env::var("PGPORT").unwrap_or_else(|_| "5016".into() );
+    let username = env::var("POSTGRES_USER").unwrap_or_else(|_| "postgres".into() );
+    let password = env::var("POSTGRES_PASSWORD").unwrap_or_else(|_| "root_pw".into() );
+    
+    let pg_port = u16::from_str_radix(&port_str, 10).unwrap();
+    let port = pg_port + 3000;
+    
     //let db_url =
     //    env::var("DATABASE_URL").unwrap_or_else(|_| "postgresql://postgres:root_pw@localhost:5016".to_string());
     info!("Installing PostgreSQL");
     //let settings = Settings::from_url(&db_url)?;
     let settings = Settings {
         version: VersionReq::parse("=16.4.0")?,
-        installation_dir: "target/install".into(),
-        data_dir: "target/data".into(),
-        port: 5016,
+        data_dir: data_dir.into(),
+        port: u16::from_str_radix(&port_str, 10).unwrap(),
         temporary: false,
-        username: "postgres".into(),
-        password: "root_pw".into(),
+        username: username.into(),
+        password: password.into(),
         ..Default::default()
     };
     let mut postgresql = PostgreSQL::new(settings);
@@ -86,10 +93,9 @@ async fn main() -> Result<()> {
         enable_extension(&pool).await?;
     }
     
-    info!("Start application");
+    let bind = format!("0.0.0.0:{port}");
     let app = Router::new().route("/", get(extensions)).with_state(pool);
-
-    let listener = TcpListener::bind("0.0.0.0:3030").await.unwrap();
+    let listener = TcpListener::bind(bind).await.unwrap();
     info!("Listening on {}", listener.local_addr()?);
     axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal())
