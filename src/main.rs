@@ -5,10 +5,12 @@
 use anyhow::Result;
 use axum::extract::State;
 use axum::{http::StatusCode, routing::get, Json, Router};
+use home;
 use postgresql_embedded::{PostgreSQL, Settings, VersionReq};
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 use std::env;
+use std::path::Path;
 use std::time::Duration;
 use tokio::signal;
 use tokio::net::TcpListener;
@@ -22,6 +24,8 @@ fn is_truthy(str: String) -> bool {
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt().compact().init();
+    let args: Vec<String> = env::args().collect();
+    let count = args.len() - 1;
     
     let data_dir = env::var("PGDATA").unwrap_or_else(|_| "target/data".into() );
     let port_str = env::var("PGPORT").unwrap_or_else(|_| "5016".into() );
@@ -33,7 +37,13 @@ async fn main() -> Result<()> {
     
     //let db_url =
     //    env::var("DATABASE_URL").unwrap_or_else(|_| "postgresql://postgres:root_pw@localhost:5016".to_string());
-    info!("Installing PostgreSQL");
+    let found = match home::home_dir() {
+        Some(path) => Path::new(&format!("{}/.theseus/postgresql/16.4.0", path.display())).exists(),
+        None => false,
+    };
+    if !found {
+        info!("Installing PostgreSQL ...");
+    }
     //let settings = Settings::from_url(&db_url)?;
     let settings = Settings {
         version: VersionReq::parse("=16.4.0")?,
@@ -62,12 +72,22 @@ async fn main() -> Result<()> {
 
     info!("Starting PostgreSQL");
     postgresql.start().await?;
-
-    let database_name = "axum-test";
-    let exists = postgresql.database_exists(database_name).await?;
-    if !exists {
-        info!("Creating database {database_name}");
-        postgresql.create_database(database_name).await?;
+    
+    let database_name = if count != 0 { &args[1] } else { "epg" };
+    if count == 0 {
+        let exists = postgresql.database_exists(database_name).await?;
+        if !exists {
+            info!("Creating database: {}", database_name);
+            postgresql.create_database(database_name).await?;
+        }
+    } else {
+        for i in 0..count {
+            let exists = postgresql.database_exists(&args[i + 1]).await?;
+            if !exists {
+                info!("Creating database: {}", &args[i + 1]);
+                postgresql.create_database(&args[i + 1]).await?;
+            }
+        }
     }
     
     let database_url = postgresql.settings().url(database_name);
@@ -80,8 +100,7 @@ async fn main() -> Result<()> {
         postgresql.stop().await?;
         postgresql.start().await?;
     }
-
-    info!("Setup connection pool @ {database_url}");
+    
     let pool = PgPoolOptions::new()
         .max_connections(5)
         .acquire_timeout(Duration::from_secs(3))
