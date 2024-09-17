@@ -7,14 +7,21 @@ use axum::extract::State;
 use axum::{http::StatusCode, routing::get, Json, Router};
 use home;
 use postgresql_embedded::{PostgreSQL, Settings, VersionReq};
+use serde::{Deserialize};
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
+use std::collections::HashMap;
 use std::env;
 use std::path::Path;
 use std::time::Duration;
 use tokio::signal;
 use tokio::net::TcpListener;
 use tracing::info;
+
+#[derive(Deserialize, Default)]
+struct Conf {
+    c: HashMap<String, String>,
+}
 
 fn is_truthy(str: String) -> bool {
     str == "1" || str == "true"
@@ -32,8 +39,24 @@ async fn main() -> Result<()> {
         info!("epg v{VERSION}");
         return Ok(());
     }
+    /*
+    let mut config_map = HashMap::new();
+    if Path::new("target/pg_hba.conf").exists() {
+        info!("Including target/pg_hba.conf");
+        config_map.insert(
+            "hba_file".to_string(),
+            "target/pg_hba.conf".to_string(),
+        );
+    }
+    */
     
     let pg_version = "16.4.0";
+    
+    let conf_str = env::var("PGCONF").unwrap_or_else(|_| "{}".into() );
+    let conf: Conf = serde_json::from_str(&format!("{{ \"c\": {conf_str} }}"))?;
+    if 0 != conf.c.len() {
+        info!("Using config(-c): {conf_str}");
+    }
     
     let port_str = env::var("PGPORT").unwrap_or_else(|_| "5016".into() );
     let pg_port = u16::from_str_radix(&port_str, 10).unwrap();
@@ -57,6 +80,7 @@ async fn main() -> Result<()> {
         temporary: false,
         username: username.into(),
         password: password.into(),
+        configuration: conf.c,
         ..Default::default()
     };
     

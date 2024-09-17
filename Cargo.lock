@@ -445,6 +445,8 @@ dependencies = [
  "home",
  "postgresql_embedded",
  "postgresql_extensions",
+ "serde",
+ "serde_json",
  "sqlx",
  "tokio",
  "tracing",

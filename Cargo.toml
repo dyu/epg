@@ -9,6 +9,8 @@ axum = "0.7.5"
 home = "0.5.9"
 postgresql_embedded = "0.16.3"
 postgresql_extensions = "0.16.3"
+serde = { version = "1.0.194", features = ["derive"] }
+serde_json = "1.0"
 sqlx = { version = "0.8.2", default-features = false, features = ["postgres", "runtime-tokio"] }
 tokio = { version = "1.40.0", features = ["full"] }
 tracing = "0.1.40"
