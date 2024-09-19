@@ -50,7 +50,7 @@ async fn main() -> Result<()> {
     }
     */
     
-    let pg_version = "16.4.0";
+    let pg_version = env::var("PGVERSION").unwrap_or_else(|_| "16.4.0".into() );
     
     let conf_str = env::var("PGCONF").unwrap_or_else(|_| "{}".into() );
     let conf: Conf = serde_json::from_str(&format!("{{ \"c\": {conf_str} }}"))?;
@@ -104,7 +104,7 @@ async fn main() -> Result<()> {
         .await?;
     }
 
-    info!("Starting PostgreSQL");
+    info!("Starting PostgreSQL {pg_version}");
     postgresql.start().await?;
     
     let database_name = if count != 0 { &args[1] } else { "postgres" };
